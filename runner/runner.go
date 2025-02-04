@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"fmt"
-	//"log"
 	"math"
 	"os"
 	"os/signal"
@@ -18,8 +17,6 @@ const (
 	histogramSize = 1024
 	histogramMin  = 0.001
 	histogramMax  = 100000
-
-	percentile = 95
 )
 
 type (
@@ -28,7 +25,8 @@ type (
 		Events         uint64 `long:"events" description:"limit for total number of events" default:"0"`
 		Time           int    `long:"time" description:"limit for total execution time in seconds" default:"10"`
 		ReportInterval int    `long:"report-interval" description:"periodically report intermediate statistics with a specified interval in seconds. 0 disables intermediate reports" default:"0"`
-		Histogram      string `long:"histogram" choice:"on" choice:"off" description:"print latency histogram in report" default:"off"`
+		Histogram      string `long:"histogram" choice:"on" choice:"off" description:"print latency histogram in report" default:"off"` //nolint:staticcheck
+		Percentile     int    `long:"percentile" description:"percentile to calculate in latency statistics (1-100)" default:"95"`
 	}
 
 	Runner struct {
@@ -41,12 +39,14 @@ func NewRunner(option *RunnerOpts) *Runner {
 }
 
 func (r *Runner) Prepare(bench benchmark.Benchmark) error {
-	err := bench.Init()
+	ctx := context.Background()
+
+	err := bench.Init(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = bench.Prepare()
+	err = bench.Prepare(ctx)
 	if err != nil {
 		return err
 	}
@@ -75,7 +75,16 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 
 	var mu sync.Mutex
 
-	err := bench.Init()
+	fmt.Println("Running the test with following options:")
+	fmt.Printf("Number of threads: %d\n", r.opts.Threads)
+
+	if r.opts.ReportInterval > 0 {
+		fmt.Printf("Report intermediate results every %d second(s)\n\n\n", r.opts.ReportInterval)
+	}
+
+	var percentile = r.opts.Percentile
+
+	err := bench.Init(context.Background())
 	if err != nil {
 		return err
 	}
@@ -152,8 +161,8 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 					mu.Unlock()
 
 					eventBegin = time.Now()
-					reads, writes, others, errors, err := bench.Event()
-					if err != nil {
+					reads, writes, others, errors, err := bench.Event(ctx)
+					if err != nil && err != context.DeadlineExceeded {
 						// ignore same error
 						if pe == nil || pe.Error() != err.Error() {
 							pe = err

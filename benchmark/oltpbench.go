@@ -1,12 +1,15 @@
 package benchmark
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
+	_ "github.com/samitani/go-sysbench/driver"
 )
 
 const (
@@ -61,21 +64,46 @@ type (
 		MySQLUser     string `long:"mysql-user" description:"MySQL user" default:"sbtest"`
 		MySQLPassword string `long:"mysql-password" env:"MYSQL_PWD" description:"MySQL password" default:""`
 		MySQLDB       string `long:"mysql-db" description:"MySQL database name" default:"sbtest"`
+		MySQLSSL      string `long:"mysql-ssl" choice:"on" choice:"off" description:"use SSL connections" default:"off"` //nolint:staticcheck
 	}
 
-	MySQLOLTP struct {
+	PgSQLOpts struct {
+		PgSQLHost     string `long:"pgsql-host" description:"PostgreSQL server host" default:"localhost"`
+		PgSQLPort     int    `long:"pgsql-port" description:"PostgreSQL server port" default:"5432"`
+		PgSQLUser     string `long:"pgsql-user" description:"PostgreSQL user" default:"sbtest"`
+		PgSQLPassword string `long:"pgsql-password" env:"PGPASSWORD" description:"PostgreSQL password" default:""`
+		PgSQLDB       string `long:"pgsql-db" description:"PostgreSQL database name" default:"sbtest"`
+	}
+
+	OLTPBench struct {
 		opts *BenchmarkOpts
 
 		db *sql.DB
 	}
 )
 
-func newMySQLOLTP(option *BenchmarkOpts) *MySQLOLTP {
-	return &MySQLOLTP{opts: option}
+func newOLTPBench(option *BenchmarkOpts) *OLTPBench {
+	return &OLTPBench{opts: option}
 }
 
-func (o *MySQLOLTP) Init() error {
-	db, err := sql.Open("mysql", o.dsn())
+func (o *OLTPBench) Init(ctx context.Context) error {
+	var drvName string
+	var dsn string
+
+	if o.opts.DBDriver == DBDriverMySQL {
+		drvName = "mysql"
+		dsn = o.dsnMySQL()
+	} else if o.opts.DBDriver == DBDriverPgSQL {
+		drvName = "postgres"
+		dsn = o.dsnPgSQL()
+	}
+
+	db, err := sql.Open(drvName, dsn)
+	if err != nil {
+		return err
+	}
+
+	err = db.Ping()
 	if err != nil {
 		return err
 	}
@@ -85,7 +113,7 @@ func (o *MySQLOLTP) Init() error {
 	return nil
 }
 
-func (o *MySQLOLTP) Prepare() error {
+func (o *OLTPBench) Prepare(ctx context.Context) error {
 	err := o.createTable()
 	if err != nil {
 		return err
@@ -93,7 +121,7 @@ func (o *MySQLOLTP) Prepare() error {
 	return nil
 }
 
-func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors uint64, e error) {
+func (o *OLTPBench) Event(ctx context.Context) (reads uint64, writes uint64, others uint64, errors uint64, e error) {
 	var numReads, numWrites, numOthers uint64
 	var tableNum = o.getRandTableNum()
 	var numRowReturn = 0
@@ -106,7 +134,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 	numOthers += 1
 
 	for i := 0; i < numPointSelects; i++ {
-		rows, err := tx.Query(fmt.Sprintf(stmtPointSelects, tableNum, sbRand(0, o.opts.TableSize)))
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf(stmtPointSelects, tableNum, sbRand(0, o.opts.TableSize)))
 		if err != nil {
 			tx.Rollback()
 			return numReads, numWrites, numOthers, 1, err
@@ -119,7 +147,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 
 	for i := 0; i < numSimpleRanges; i++ {
 		begin := sbRand(0, o.opts.TableSize)
-		rows, err := tx.Query(fmt.Sprintf(stmtSimpleRanges, tableNum, begin, begin+rangeSize-1))
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf(stmtSimpleRanges, tableNum, begin, begin+rangeSize-1))
 		if err != nil {
 			tx.Rollback()
 			return numReads, numWrites, numOthers, 1, err
@@ -132,7 +160,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 
 	for i := 0; i < numSumRanges; i++ {
 		begin := sbRand(0, o.opts.TableSize)
-		rows, err := tx.Query(fmt.Sprintf(stmtSumRanges, tableNum, begin, begin+rangeSize-1))
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf(stmtSumRanges, tableNum, begin, begin+rangeSize-1))
 		if err != nil {
 			tx.Rollback()
 			return numReads, numWrites, numOthers, 1, err
@@ -145,7 +173,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 
 	for i := 0; i < numOrderRanges; i++ {
 		begin := sbRand(0, o.opts.TableSize)
-		rows, err := tx.Query(fmt.Sprintf(stmtOrderRanges, tableNum, begin, begin+rangeSize-1))
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf(stmtOrderRanges, tableNum, begin, begin+rangeSize-1))
 		if err != nil {
 			tx.Rollback()
 			return numReads, numWrites, numOthers, 1, err
@@ -158,7 +186,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 
 	for i := 0; i < numDistinctRanges; i++ {
 		begin := sbRand(0, o.opts.TableSize)
-		rows, err := tx.Query(fmt.Sprintf(stmtDistinctRanges, tableNum, begin, begin+rangeSize-1))
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf(stmtDistinctRanges, tableNum, begin, begin+rangeSize-1))
 		if err != nil {
 			tx.Rollback()
 			return numReads, numWrites, numOthers, 1, err
@@ -171,7 +199,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 
 	if o.opts.ReadWrite {
 		for i := 0; i < numIndexUpdates; i++ {
-			_, err := tx.Exec(fmt.Sprintf(stmtIndexUpdates, tableNum, sbRand(0, o.opts.TableSize)))
+			_, err := tx.ExecContext(ctx, fmt.Sprintf(stmtIndexUpdates, tableNum, sbRand(0, o.opts.TableSize)))
 			if err != nil {
 				tx.Rollback()
 				return numReads, numWrites, numOthers, 1, err
@@ -179,7 +207,7 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 			numWrites += 1
 		}
 		for i := 0; i < numNonIndexUpdates; i++ {
-			_, err := tx.Exec(fmt.Sprintf(stmtNonIndex_updates, tableNum, getCValue(), sbRand(0, o.opts.TableSize)))
+			_, err := tx.ExecContext(ctx, fmt.Sprintf(stmtNonIndex_updates, tableNum, getCValue(), sbRand(0, o.opts.TableSize)))
 			if err != nil {
 				tx.Rollback()
 				return numReads, numWrites, numOthers, 1, err
@@ -189,14 +217,14 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 		for i := 0; i < numDeleteInserts; i++ {
 			id := sbRand(0, o.opts.TableSize)
 
-			_, err := tx.Exec(fmt.Sprintf(stmtDeletes, tableNum, id))
+			_, err := tx.ExecContext(ctx, fmt.Sprintf(stmtDeletes, tableNum, id))
 			if err != nil {
 				tx.Rollback()
 				return numReads, numWrites, numOthers, 1, err
 			}
 			numWrites += 1
 
-			_, err = tx.Exec(fmt.Sprintf(stmtInserts, tableNum, id, sbRand(0, o.opts.TableSize), getCValue(), getPadValue()))
+			_, err = tx.ExecContext(ctx, fmt.Sprintf(stmtInserts, tableNum, id, sbRand(0, o.opts.TableSize), getCValue(), getPadValue()))
 			if err != nil {
 				tx.Rollback()
 				return numReads, numWrites, numOthers, 1, err
@@ -215,16 +243,20 @@ func (o *MySQLOLTP) Event() (reads uint64, writes uint64, others uint64, errors 
 	return numReads, numWrites, numOthers, 0, nil
 }
 
-func (o *MySQLOLTP) Done() error {
+func (o *OLTPBench) Done() error {
 	o.db.Close()
 	return nil
 }
 
-func (o *MySQLOLTP) dsn() string {
+func (o *OLTPBench) dsnMySQL() string {
 	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s", o.opts.MySQLUser, o.opts.MySQLPassword, o.opts.MySQLHost, o.opts.MySQLPort, o.opts.MySQLDB)
 }
 
-func (o *MySQLOLTP) getRandTableNum() int {
+func (o *OLTPBench) dsnPgSQL() string {
+	return fmt.Sprintf("postgres://%s:%s@%s:%d/%s?sslmode=disable", o.opts.PgSQLUser, o.opts.PgSQLPassword, o.opts.PgSQLHost, o.opts.PgSQLPort, o.opts.PgSQLDB)
+}
+
+func (o *OLTPBench) getRandTableNum() int {
 	return sbRand(1, o.opts.Tables)
 }
 
@@ -256,8 +288,15 @@ func sbRandStr(format string) string {
 	return string(buf)
 }
 
-func (o *MySQLOLTP) createTable() error {
-	idDef := "INT NOT NULL AUTO_INCREMENT"
+func (o *OLTPBench) createTable() error {
+	var idDef string
+
+	if o.opts.DBDriver == DBDriverPgSQL {
+		idDef = "INT NOT NULL"
+	} else {
+		idDef = "INT NOT NULL AUTO_INCREMENT"
+	}
+
 	idIndexDef := "PRIMARY KEY"
 	engineDef := ""
 	extraTableOptions := ""
@@ -278,10 +317,10 @@ func (o *MySQLOLTP) createTable() error {
 
 		fmt.Printf("Inserting %d records into 'sbtest%d'\n", o.opts.TableSize, tableNum)
 		insertValues := []string{}
-		for i := 0; i < o.opts.TableSize; i++ {
-			insertValues = append(insertValues, fmt.Sprintf(`(%d, "%s", "%s") `, sbRand(0, o.opts.TableSize), getCValue(), getPadValue()))
+		for i := 1; i <= o.opts.TableSize; i++ {
+			insertValues = append(insertValues, fmt.Sprintf(`(%d, %d, '%s', '%s') `, i, sbRand(0, o.opts.TableSize), getCValue(), getPadValue()))
 		}
-		query = fmt.Sprintf("INSERT INTO sbtest%d (k, c, pad) VALUES", tableNum) + strings.Join(insertValues, ",")
+		query = fmt.Sprintf("INSERT INTO sbtest%d (id, k, c, pad) VALUES", tableNum) + strings.Join(insertValues, ",")
 		_, err = o.db.Exec(query)
 		if err != nil {
 			return err

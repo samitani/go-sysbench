@@ -8,6 +8,8 @@ require (
 	cloud.google.com/go/spanner v1.74.0
 	github.com/go-sql-driver/mysql v1.8.1
 	github.com/jessevdk/go-flags v1.6.1
+	github.com/lib/pq v1.10.9
+	google.golang.org/api v0.218.0
 )
 
 require (
@@ -52,7 +54,6 @@ require (
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	google.golang.org/api v0.218.0 // indirect
 	google.golang.org/genproto v0.0.0-20250122153221-138b5a5a4fd4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250124145028-65684f501c47 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250124145028-65684f501c47 // indirect

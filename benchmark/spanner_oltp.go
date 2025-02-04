@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	stmtSpannerPointSelects     = "SELECT c FROM sbtest%d WHERE id=%d"
-	stmtSpannerSimpleRanges     = "SELECT c FROM sbtest%d WHERE id BETWEEN %d AND %d"
-	stmtSpannerSumRanges        = "SELECT SUM(k) FROM sbtest%d WHERE id BETWEEN %d AND %d"
+	stmtSpannerPointSelects     = "SELECT c FROM sbtest%d WHERE id=@Id"
+	stmtSpannerSimpleRanges     = "SELECT c FROM sbtest%d WHERE id BETWEEN @Begin AND @End"
+	stmtSpannerSumRanges        = "SELECT SUM(k) FROM sbtest%d WHERE id BETWEEN @Begin AND @End"
 	stmtSpannerOrderRanges      = "SELECT c FROM sbtest%d WHERE id BETWEEN %d AND %d ORDER BY c"
 	stmtSpannerDistinctRanges   = "SELECT DISTINCT c FROM sbtest%d WHERE id BETWEEN %d AND %d ORDER BY c"
 	stmtSpannerIndexUpdates     = "UPDATE sbtest%d SET k=k+1 WHERE id=%d"
@@ -35,7 +35,6 @@ type (
 	SpannerOLTP struct {
 		opts *BenchmarkOpts
 		db   *spanner.Client
-		ctx  context.Context
 	}
 )
 
@@ -43,11 +42,8 @@ func newSpannerOLTP(option *BenchmarkOpts) *SpannerOLTP {
 	return &SpannerOLTP{opts: option}
 }
 
-func (s *SpannerOLTP) Init() error {
-	ctx := context.TODO()
-	s.ctx = ctx
-
-	client, err := spanner.NewClient(s.ctx, s.dsn())
+func (s *SpannerOLTP) Init(ctx context.Context) error {
+	client, err := spanner.NewClient(ctx, s.dsn())
 	if err != nil {
 		return err
 	}
@@ -56,8 +52,8 @@ func (s *SpannerOLTP) Init() error {
 	return nil
 }
 
-func (s *SpannerOLTP) Prepare() error {
-	err := s.createTable()
+func (s *SpannerOLTP) Prepare(ctx context.Context) error {
+	err := s.createTable(ctx)
 	if err != nil {
 		return err
 	}
@@ -68,14 +64,15 @@ func (s *SpannerOLTP) getRandTableNum() int {
 	return sbRand(1, s.opts.Tables)
 }
 
-func (s *SpannerOLTP) Event() (reads uint64, writes uint64, others uint64, errors uint64, e error) {
+func (s *SpannerOLTP) Event(ctx context.Context) (reads uint64, writes uint64, others uint64, errors uint64, e error) {
 	var tableNum = s.getRandTableNum()
 	var numReads uint64
 
-	_, err := s.db.ReadWriteTransaction(s.ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+	_, err := s.db.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 		for i := 0; i < numPointSelects; i++ {
 			stmt := spanner.Statement{
-				SQL: fmt.Sprintf(stmtSpannerPointSelects, tableNum, sbRand(0, s.opts.TableSize)),
+				SQL:    fmt.Sprintf(stmtSpannerPointSelects, tableNum),
+				Params: map[string]interface{}{"Id": sbRand(0, s.opts.TableSize)},
 			}
 			_, err := txn.Query(ctx, stmt).Next()
 			if err != nil && err != iterator.Done {
@@ -83,6 +80,19 @@ func (s *SpannerOLTP) Event() (reads uint64, writes uint64, others uint64, error
 			}
 			numReads += 1
 		}
+		for i := 0; i < numSimpleRanges; i++ {
+			begin := sbRand(0, s.opts.TableSize)
+			stmt := spanner.Statement{
+				SQL:    fmt.Sprintf(stmtSpannerSimpleRanges, tableNum),
+				Params: map[string]interface{}{"Begin": begin, "End": begin + rangeSize - 1},
+			}
+			_, err := txn.Query(ctx, stmt).Next()
+			if err != nil && err != iterator.Done {
+				return err
+			}
+			numReads += 1
+		}
+
 		return nil
 	})
 	return numReads, 0, 0, 0, err
@@ -97,8 +107,7 @@ func (s *SpannerOLTP) dsn() string {
 	return fmt.Sprintf("projects/%s/instances/%s/databases/%s", s.opts.SpannerProjectId, s.opts.SpannerInstanceId, s.opts.SpannerDB)
 }
 
-func (s *SpannerOLTP) createTable() error {
-	ctx := context.TODO()
+func (s *SpannerOLTP) createTable(ctx context.Context) error {
 	adminClient, err := database.NewDatabaseAdminClient(ctx)
 
 	if err != nil {
@@ -134,7 +143,7 @@ func (s *SpannerOLTP) createTable() error {
 		}
 		query := fmt.Sprintf("INSERT INTO sbtest%d (id, k, c, pad) VALUES", tableNum) + strings.Join(insertValues, ",")
 
-		_, err = s.db.ReadWriteTransaction(s.ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
+		_, err = s.db.ReadWriteTransaction(ctx, func(ctx context.Context, txn *spanner.ReadWriteTransaction) error {
 			stmt := spanner.Statement{
 				SQL: query,
 			}

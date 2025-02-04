@@ -1,11 +1,19 @@
 package benchmark
 
+import "context"
+
+const (
+	DBDriverMySQL   = "mysql"
+	DBDriverPgSQL   = "pgsql"
+	DBDriverSpanner = "spanner"
+)
+
 type (
 	Benchmark interface {
-		Init() error
+		Init(context.Context) error
 		Done() error
-		Prepare() error
-		Event() (uint64, uint64, uint64, uint64, error)
+		Prepare(context.Context) error
+		Event(context.Context) (uint64, uint64, uint64, uint64, error)
 	}
 	CommonOpts struct {
 		Tables    int    `long:"tables" description:"number of tables" default:"1"`
@@ -16,14 +24,15 @@ type (
 	BenchmarkOpts struct {
 		CommonOpts
 		MySQLOpts
+		PgSQLOpts
 		SpannerOpts
 	}
 )
 
 func BenchmarkFactory(opt *BenchmarkOpts) Benchmark {
-	if opt.DBDriver == "spanner" {
+	if opt.DBDriver == DBDriverSpanner {
 		return newSpannerOLTP(opt)
 	} else {
-		return newMySQLOLTP(opt)
+		return newOLTPBench(opt)
 	}
 }

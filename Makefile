@@ -1,6 +1,6 @@
 .PHONY: build
 build:
-	go build -trimpath -o go-sysbench cmd/main.go
+	go build -trimpath -o go-sysbench cmd/go-sysbench/main.go
 
 .PHONY: lint
 lint:
@@ -9,4 +9,4 @@ lint:
 
 .PHONY: test
 test:
-	go test -v ./...
+	go test -coverprofile=coverage.txt -covermode=atomic -v -race ./...

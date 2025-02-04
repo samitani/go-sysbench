@@ -2,7 +2,6 @@ package runner
 
 import (
 	"testing"
-	// "fmt"
 )
 
 func TestHistogramAdd(t *testing.T) {
@@ -42,17 +41,4 @@ func TestGetPercentile(t *testing.T) {
 	if p100 <= 99999.0 {
 		t.Errorf("Expected 100th percentile to be 99999.0, got %f", p100)
 	}
-}
-
-func TestPrint(t *testing.T) {
-	h := NewHistogram(1024, 0.001, 100000)
-
-	h.Add(0.002)
-	h.Add(0.01)
-	h.Add(0.01)
-	h.Add(1.0)
-	h.Add(500.0)
-	h.Add(99999.0)
-
-	h.Print()
 }
