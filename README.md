@@ -63,3 +63,8 @@ Help Options:
 ## Additional feature
 
 ### Google Cloud Spanner 
+
+`go-sysbench` supports Google Cloud Spanner.
+```
+go-sysbench oltp_read_write run --db-driver=spanner --spanner-project=YOUR-PROJECT --spanner-instance=YOUR-INSTANCE-NAME
+```
