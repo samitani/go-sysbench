@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"os"
@@ -180,7 +181,7 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 
 					eventBegin = time.Now()
 					reads, writes, others, igerrs, err := bench.Event(ctx)
-					if err != nil && err != context.DeadlineExceeded && err != context.Canceled {
+					if err != nil && err != context.DeadlineExceeded && err != context.Canceled && err != sql.ErrTxDone {
 						fmt.Println(err)
 						cancel()
 						return
