@@ -11,10 +11,9 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/googleapis/go-sql-spanner"
+	"github.com/lib/pq"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	_ "github.com/lib/pq"
 )
 
 const (
@@ -57,7 +56,7 @@ const (
 	OptSSLOn  = "on"
 	OptSSLOff = "off"
 
-	OptMySQLIgnoreErrsAll = "all"
+	OptIgnoreErrsAll = "all"
 
 	OptDBPreparedStmtAuto    = "auto"
 	OptDBPreparedStmtDisable = "disable"
@@ -102,12 +101,13 @@ type (
 	}
 
 	PgSQLOpts struct {
-		PgSQLHost     string `long:"pgsql-host" description:"PostgreSQL server host" default:"localhost"`
-		PgSQLPort     int    `long:"pgsql-port" description:"PostgreSQL server port" default:"5432"`
-		PgSQLUser     string `long:"pgsql-user" description:"PostgreSQL user" default:"sbtest"`
-		PgSQLPassword string `long:"pgsql-password" env:"PGPASSWORD" description:"PostgreSQL password" default:""`
-		PgSQLDB       string `long:"pgsql-db" description:"PostgreSQL database name" default:"sbtest"`
-		PgSQLSSL      string `long:"pgsql-ssl" choice:"on" choice:"off" description:"use SSL connections" default:"off"` //nolint:staticcheck
+		PgSQLHost       string `long:"pgsql-host" description:"PostgreSQL server host" default:"localhost"`
+		PgSQLPort       int    `long:"pgsql-port" description:"PostgreSQL server port" default:"5432"`
+		PgSQLUser       string `long:"pgsql-user" description:"PostgreSQL user" default:"sbtest"`
+		PgSQLPassword   string `long:"pgsql-password" env:"PGPASSWORD" description:"PostgreSQL password" default:""`
+		PgSQLDB         string `long:"pgsql-db" description:"PostgreSQL database name" default:"sbtest"`
+		PgSQLSSL        string `long:"pgsql-ssl" choice:"on" choice:"off" description:"use SSL connections" default:"off"` //nolint:staticcheck
+		PgSQLIgnoreErrs string `long:"pgsql-ignore-errors" description:"list of errors to ignore, or \"all\"" default:"40P01,23505,40001"`
 	}
 
 	SpannerOpts struct {
@@ -119,17 +119,25 @@ type (
 	OLTPBench struct {
 		opts *BenchmarkOpts
 
-		rwMode               string
-		mysqlIgnoreErrsSlice []uint16
-		db                   *sql.DB
-		staticStmts          map[int]map[string]string
-		preparedStmts        map[int]map[string]*sql.Stmt // tableNum -> stmtName -> preparedStmt
-		eventFuncRef         func(context.Context) (uint64, uint64, uint64, error)
+		rwMode         string
+		ignoreErrSlice []string
+		db             *sql.DB
+		staticStmts    map[int]map[string]string
+		preparedStmts  map[int]map[string]*sql.Stmt // tableNum -> stmtName -> preparedStmt
+		eventFuncRef   func(context.Context) (uint64, uint64, uint64, error)
 	}
 )
 
 func newOLTPBench(option *BenchmarkOpts, mode string) *OLTPBench {
-	return &OLTPBench{opts: option, rwMode: mode}
+	var ignoreErrors []string
+
+	if option.DBDriver == DBDriverMySQL {
+		ignoreErrors = strings.Split(option.MySQLIgnoreErrs, ",")
+	} else if option.DBDriver == DBDriverPgSQL {
+		ignoreErrors = strings.Split(option.PgSQLIgnoreErrs, ",")
+	}
+
+	return &OLTPBench{opts: option, ignoreErrSlice: ignoreErrors, rwMode: mode}
 }
 
 func (o *OLTPBench) Init(ctx context.Context) error {
@@ -147,12 +155,6 @@ func (o *OLTPBench) Init(ctx context.Context) error {
 		dsn = o.dsnSpanner()
 	} else {
 		panic("Unexpected driver")
-	}
-
-	strs := strings.Split(o.opts.MySQLIgnoreErrs, ",")
-	for _, n := range strs {
-		c, _ := strconv.Atoi(n)
-		o.mysqlIgnoreErrsSlice = append(o.mysqlIgnoreErrsSlice, uint16(c))
 	}
 
 	db, err := sql.Open(drvName, dsn)
@@ -228,7 +230,14 @@ func (o *OLTPBench) Event(ctx context.Context) (numReads, numWrites, numOthers, 
 			me, ok := err.(*mysql.MySQLError)
 			if ok {
 				// ignore mysql error
-				if o.opts.MySQLIgnoreErrs == OptMySQLIgnoreErrsAll || slices.Contains(o.mysqlIgnoreErrsSlice, me.Number) {
+				if o.opts.MySQLIgnoreErrs == OptIgnoreErrsAll || slices.Contains(o.ignoreErrSlice, strconv.Itoa(int(me.Number))) {
+					return numReads, numWrites, numOthers, 1, nil
+				}
+			}
+		} else if o.opts.DBDriver == DBDriverPgSQL {
+			pe, ok := err.(*pq.Error)
+			if ok {
+				if o.opts.PgSQLIgnoreErrs == OptIgnoreErrsAll || slices.Contains(o.ignoreErrSlice, string(pe.Code)) {
 					return numReads, numWrites, numOthers, 1, nil
 				}
 			}

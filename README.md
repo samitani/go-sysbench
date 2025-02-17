@@ -69,6 +69,7 @@ PostgreSQL:
       --pgsql-password=                 PostgreSQL password [$PGPASSWORD]
       --pgsql-db=                       PostgreSQL database name (default: sbtest)
       --pgsql-ssl=[on|off]              use SSL connections (default: off)
+      --pgsql-ignore-errors=            list of errors to ignore, or "all" (default: 40P01,23505,40001)
 
 Spanner:
       --spanner-project=                Spanner Google Cloud project name
