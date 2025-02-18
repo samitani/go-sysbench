@@ -95,7 +95,7 @@ Help Options:
 Cloud Spanner is prone to lock contention. You need to increase the number of records to avoid lock contention.
 ```
 $ gcloud auth login --update-adc
-$ go-sysbench oltp_read_write run --db-driver=spanner --spanner-project=YOUR-PROJECT --spanner-instance=YOUR-INSTANCE-NAME --table_size=1000000
+$ go-sysbench --db-driver=spanner --spanner-project=YOUR-PROJECT --spanner-instance=YOUR-INSTANCE-NAME --table_size=1000000 oltp_read_write run
 ```
 
 In Spanner benchmark, `ErrAbortedDueToConcurrentModification` error is ignored.
