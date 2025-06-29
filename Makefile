@@ -3,7 +3,7 @@ LDFLAGS=-ldflags "-X main.version=$(VERSION)"
 
 .PHONY: build
 build:
-	go build $(LDFLAGS) -trimpath -o go-sysbench cmd/go-sysbench/main.go
+	go build $(LDFLAGS) -trimpath -o go-sysbench ./cmd/go-sysbench/...
 
 .PHONY: lint
 lint:
