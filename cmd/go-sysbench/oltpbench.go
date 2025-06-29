@@ -723,4 +723,3 @@ func (o *OLTPBench) createTable() error {
 
 	return nil
 }
-

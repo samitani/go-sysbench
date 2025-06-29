@@ -45,12 +45,13 @@ func main() {
 	command := args[1]
 
 	bench, err := benchmarkFactory(testname, &opts.BenchmarkOpts)
-	r := sysbench.NewRunner(&opts.RunnerOpts, bench)
 
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
+	r := sysbench.NewRunner(&opts.RunnerOpts, bench)
 
 	if command == "run" {
 		err = r.Run()
