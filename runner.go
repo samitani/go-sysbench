@@ -24,15 +24,15 @@ const (
 
 type (
 	Benchmark interface {
-		// initialize before both Prepare and Event
+		// when Runner.Prepare(), Runner.Run() is called, Init() is called once in advance.
 		Init(context.Context) error
-		// finalize after both Prepare and Event
+		// when Runner.Prepare(), Runner.Run() is called, Done() is called once at the end.
 		Done() error
-		// when prepare command is issued
+		// when Runner.Prepare() is called, Prepare() is called once.
 		Prepare(context.Context) error
-		// when run command is issued, PreEvent() is called once in a benchmark
+		// when Runner.Run() is called, PreEvent() is called once before event loop.
 		PreEvent(context.Context) error
-		// when run command is issued, Event() is called in a loop
+		// when Runner.Run() is called, Event() is called in a loop
 		Event(context.Context) (numReads, numWrites, numOthers, numIgnoredErros uint64, err error)
 	}
 

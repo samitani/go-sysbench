@@ -100,84 +100,119 @@ $ go-sysbench --db-driver=spanner --spanner-project=YOUR-PROJECT --spanner-insta
 
 In Spanner benchmark, `ErrAbortedDueToConcurrentModification` error is ignored.
 
-## Custom Scenario
+## How to custom scenario
 
+* To customize the benchmark scenario, define a struct that satisfies the Benchmark interface.
+* Timing of each function call:
+```
+Runner.Prepare()
+    -> Init()
+    -> Prepare()
+    -> Done()
+
+Runner.Run()
+    -> Init()
+    -> PreEvent()
+
+    -> Event()
+    -> Event()
+    -> Event() ...
+
+    -> Done()
+```
+
+* example:
 ```
 package main
 
 import (
-    "context"
-    "fmt"
-    "os"
+        "context"
+        "fmt"
+        "os"
 
-    "database/sql"
+        "database/sql"
 
-    _ "github.com/go-sql-driver/mysql"
+        _ "github.com/go-sql-driver/mysql"
 
-    "github.com/samitani/go-sysbench"
+        "github.com/samitani/go-sysbench"
 )
 
 type CustomBenchmark struct {
-    db *sql.DB
+        db *sql.DB
 }
 
-// initialize before both Prepare and Event
-func (b *CustomBenchmark) Init(context.Context) error {
-    db, err := sql.Open("mysql", "root:@/my_database")
-    if err != nil {
-        return err
-    }
+// when Runner.Prepare(), Runner.Run() is called, Init() is called once in advance.
+func (b *CustomBenchmark) Init(ctx context.Context) error {
+        db, err := sql.Open("mysql", "root:password@/my_database")
+        if err != nil {
+                return err
+        }
 
-    defer db.Close()
+        err = db.Ping()
+        if err != nil {
+                return err
+        }
 
-    b.db = db
-    return nil
+        b.db = db
+        return nil
 }
 
-// finalize after both Prepare and Event
+// when Runner.Prepare(), Runner.Run() is called, Done() is called once at the end.
 func (b *CustomBenchmark) Done() error {
-    // nothing to do
-    return nil
+        b.db.Close()
+        return nil
 }
 
-// when prepare command is issued
-func (b *CustomBenchmark) Prepare(context.Context) error {
-    // nothing to do
-    return nil
+// when Runner.Prepare() is called, Prepare() is called once.
+func (b *CustomBenchmark) Prepare(ctx context.Context) error {
+        // nothing to do
+        return nil
 }
 
-// when run command is issued, PreEvent() is called once in a benchmark
-func (b *CustomBenchmark) PreEvent(context.Context) error {
-    // nothing to do
-    return nil
+// when Runner.Run() is called, PreEvent() is called once before event loop.
+func (b *CustomBenchmark) PreEvent(ctx context.Context) error {
+        // nothing to do
+        return nil
 }
 
-// when run command is issued, Event() is called in a loop
-func (b *CustomBenchmark) Event(context.Context) (numReads, numWrites, numOthers, numIgnoredErros uint64, err error) {
-    // something you want to measure
-    _, err = b.db.Query("SELECT NOW()")
-    if err != nil {
-        return 0, 0, 0, 0, err
-    }
+// when Runner.Run() is called, Event() is called in a loop
+func (b *CustomBenchmark) Event(ctx context.Context) (numReads, numWrites, numOthers, numIgnoredErros uint64, err error) {
+        var readCount uint64 = 0
+        var writeCount uint64 = 0
 
-    return 1, 1, 1, 0, nil
+        // something you want to measure
+        for i := 0; i < 5; i++ {
+                rows, err := b.db.QueryContext(ctx, "SELECT NOW()")
+                if err != nil {
+                        return readCount, 0, 0, 0, err
+                }
+                defer rows.Close()
+
+                // fetch rows from server
+                for rows.Next() {
+                }
+
+                readCount = readCount + 1
+        }
+
+        return readCount, writeCount, 0, 0, nil
 }
 
 func main() {
-    bench := &CustomBenchmark{}
+        bench := &CustomBenchmark{}
 
-    r := sysbench.NewRunner(&sysbench.RunnerOpts{
-        Threads:        10,
-        Events:         0,
-        Time:           60,
-        ReportInterval: 1,
-        Histogram:      "on",
-        Percentile:     95,
-    }, bench)
+        r := sysbench.NewRunner(&sysbench.RunnerOpts{
+                Threads:        10,
+                Events:         0,
+                Time:           60,
+                ReportInterval: 1,
+                Histogram:      "on",
+                Percentile:     95,
+        }, bench)
 
-    if err := r.Run(); err != nil {
-        fmt.Println(err)
-        os.Exit(1)
-    }
+        if err := r.Run(); err != nil {
+                fmt.Println(err)
+                os.Exit(1)
+        }
 }
 ```
