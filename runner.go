@@ -1,4 +1,4 @@
-package runner
+package sysbench
 
 import (
 	"context"
@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/samitani/go-sysbench/benchmark"
 )
 
 const (
@@ -25,6 +23,19 @@ const (
 )
 
 type (
+	Benchmark interface {
+		// initialize before both Prepare and Event
+		Init(context.Context) error
+		// finalize after both Prepare and Event
+		Done() error
+		// when prepare command is issued
+		Prepare(context.Context) error
+		// when run command is issued, PreEvent() is called once in a benchmark
+		PreEvent(context.Context) error
+		// when run command is issued, Event() is called in a loop
+		Event(context.Context) (numReads, numWrites, numOthers, numIgnoredErros uint64, err error)
+	}
+
 	RunnerOpts struct {
 		Threads        int    `long:"threads" description:"number of threads to use" default:"1"`
 		Events         uint64 `long:"events" description:"limit for total number of events" default:"0"`
@@ -35,28 +46,53 @@ type (
 	}
 
 	Runner struct {
-		opts *RunnerOpts
+		opts  *RunnerOpts
+		bench *benchmarkAdapter
+	}
+
+	benchmarkAdapter struct {
+		bench Benchmark
 	}
 )
 
-func NewRunner(option *RunnerOpts) *Runner {
-	return &Runner{option}
+func (a *benchmarkAdapter) Init(ctx context.Context) error {
+	return a.bench.Init(ctx)
 }
 
-func (r *Runner) Prepare(bench benchmark.Benchmark) error {
+func (a *benchmarkAdapter) Done() error {
+	return a.bench.Done()
+}
+
+func (a *benchmarkAdapter) Prepare(ctx context.Context) error {
+	return a.bench.Prepare(ctx)
+}
+
+func (a *benchmarkAdapter) PreEvent(ctx context.Context) error {
+	return a.bench.PreEvent(ctx)
+}
+
+func (a *benchmarkAdapter) Event(ctx context.Context) (uint64, uint64, uint64, uint64, error) {
+	return a.bench.Event(ctx)
+}
+
+func NewRunner(option *RunnerOpts, bench Benchmark) *Runner {
+	return &Runner{option, &benchmarkAdapter{bench}}
+}
+
+func (r *Runner) Prepare() error {
 	ctx := context.Background()
 
-	err := bench.Init(ctx)
+	err := r.bench.Init(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = bench.Prepare(ctx)
+	err = r.bench.Prepare(ctx)
 	if err != nil {
 		return err
 	}
 
-	err = bench.Done()
+	err = r.bench.Done()
 	if err != nil {
 		return err
 	}
@@ -64,7 +100,7 @@ func (r *Runner) Prepare(bench benchmark.Benchmark) error {
 	return nil
 }
 
-func (r *Runner) Run(bench benchmark.Benchmark) error {
+func (r *Runner) Run() error {
 	// global shared stats
 	var totalQueries, totalTransactions atomic.Uint64
 	var totalReads, totalWrites, totalOthers, totalIgnoredErrors atomic.Uint64
@@ -98,12 +134,12 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 
 	var percentile = r.opts.Percentile
 
-	err := bench.Init(context.Background())
+	err := r.bench.Init(context.Background())
 	if err != nil {
 		return err
 	}
 
-	err = bench.PreEvent(context.Background())
+	err = r.bench.PreEvent(context.Background())
 	if err != nil {
 		return err
 	}
@@ -180,7 +216,7 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 					}
 
 					eventBegin = time.Now()
-					reads, writes, others, igerrs, err := bench.Event(ctx)
+					reads, writes, others, igerrs, err := r.bench.Event(ctx)
 					if err != nil && err != context.DeadlineExceeded && err != context.Canceled && err != sql.ErrTxDone {
 						fmt.Println(err)
 						cancel()
@@ -236,7 +272,7 @@ func (r *Runner) Run(bench benchmark.Benchmark) error {
 	wg.Wait()
 	totalTime := time.Since(begin).Seconds()
 
-	err = bench.Done()
+	err = r.bench.Done()
 	if err != nil {
 		return err
 	}

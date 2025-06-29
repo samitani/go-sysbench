@@ -1,4 +1,4 @@
-package benchmark
+package main
 
 import (
 	"context"
@@ -14,11 +14,17 @@ import (
 	"github.com/lib/pq"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/samitani/go-sysbench"
 )
 
 const (
 	NameOLTPReadOnly  = "oltp_read_only"
 	NameOLTPReadWrite = "oltp_read_write"
+
+	DBDriverMySQL   = "mysql"
+	DBDriverPgSQL   = "pgsql"
+	DBDriverSpanner = "spanner"
 
 	// https://github.com/akopytov/sysbench/blob/1.0.20/src/lua/oltp_common.lua#L36-L37
 	// Range size for range SELECT queries
@@ -116,6 +122,21 @@ type (
 		SpannerDB         string `long:"spanner-db" description:"Spanner database name" default:"sbtest"`
 	}
 
+	CommonOpts struct {
+		Tables         int    `long:"tables" description:"number of tables" default:"1"`
+		TableSize      int    `long:"table_size" description:"number of rows per table" default:"10000"`
+		TableSizeP     int    `long:"table-size" description:"alias of --table_size"`
+		DBDriver       string `long:"db-driver" choice:"mysql" choice:"pgsql" choice:"spanner" description:"specifies database driver to use" default:"mysql"` //nolint:staticcheck
+		DBPreparedStmt string `long:"db-ps-mode" choice:"auto" choice:"disable" description:"prepared statements usage mode" default:"auto"`                   //nolint:staticcheck
+	}
+
+	BenchmarkOpts struct {
+		CommonOpts
+		MySQLOpts   `group:"MySQL" description:"MySQL options"`
+		PgSQLOpts   `group:"PostgreSQL" description:"PostgreSQL options"`
+		SpannerOpts `group:"Spanner" description:"Google Cloud Spanner options"`
+	}
+
 	OLTPBench struct {
 		opts *BenchmarkOpts
 
@@ -127,6 +148,24 @@ type (
 		eventFuncRef   func(context.Context) (uint64, uint64, uint64, error)
 	}
 )
+
+func benchmarkFactory(testname string, opt *BenchmarkOpts) (sysbench.Benchmark, error) {
+	if opt.TableSizeP != 0 {
+		opt.TableSize = opt.TableSizeP
+	}
+
+	if testname == NameOLTPReadOnly {
+		return newOLTPBench(opt, rwModeReadOnly), nil
+	} else if testname == NameOLTPReadWrite {
+		return newOLTPBench(opt, rwModeReadWrite), nil
+	}
+	return nil, fmt.Errorf("Unknown benchmark: %s", testname)
+
+}
+
+func benchmarkNames() []string {
+	return []string{NameOLTPReadOnly, NameOLTPReadWrite}
+}
 
 func newOLTPBench(option *BenchmarkOpts, mode string) *OLTPBench {
 	var ignoreErrors []string
@@ -684,3 +723,4 @@ func (o *OLTPBench) createTable() error {
 
 	return nil
 }
+

@@ -99,3 +99,85 @@ $ go-sysbench --db-driver=spanner --spanner-project=YOUR-PROJECT --spanner-insta
 ```
 
 In Spanner benchmark, `ErrAbortedDueToConcurrentModification` error is ignored.
+
+## Custom Scenario
+
+```
+package main
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "database/sql"
+
+    _ "github.com/go-sql-driver/mysql"
+
+    "github.com/samitani/go-sysbench"
+)
+
+type CustomBenchmark struct {
+    db *sql.DB
+}
+
+// initialize before both Prepare and Event
+func (b *CustomBenchmark) Init(context.Context) error {
+    db, err := sql.Open("mysql", "root:@/my_database")
+    if err != nil {
+        return err
+    }
+
+    defer db.Close()
+
+    b.db = db
+    return nil
+}
+
+// finalize after both Prepare and Event
+func (b *CustomBenchmark) Done() error {
+    // nothing to do
+    return nil
+}
+
+// when prepare command is issued
+func (b *CustomBenchmark) Prepare(context.Context) error {
+    // nothing to do
+    return nil
+}
+
+// when run command is issued, PreEvent() is called once in a benchmark
+func (b *CustomBenchmark) PreEvent(context.Context) error {
+    // nothing to do
+    return nil
+}
+
+// when run command is issued, Event() is called in a loop
+func (b *CustomBenchmark) Event(context.Context) (numReads, numWrites, numOthers, numIgnoredErros uint64, err error) {
+    // something you want to measure
+    _, err = b.db.Query("SELECT NOW()")
+    if err != nil {
+        return 0, 0, 0, 0, err
+    }
+
+    return 1, 1, 1, 0, nil
+}
+
+func main() {
+    bench := &CustomBenchmark{}
+
+    r := sysbench.NewRunner(&sysbench.RunnerOpts{
+        Threads:        10,
+        Events:         0,
+        Time:           60,
+        ReportInterval: 1,
+        Histogram:      "on",
+        Percentile:     95,
+    }, bench)
+
+    if err := r.Run(); err != nil {
+        fmt.Println(err)
+        os.Exit(1)
+    }
+}
+```
