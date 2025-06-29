@@ -6,18 +6,16 @@ import (
 	"strings"
 
 	"github.com/jessevdk/go-flags"
-
-	"github.com/samitani/go-sysbench/benchmark"
-	"github.com/samitani/go-sysbench/runner"
+	"github.com/samitani/go-sysbench"
 )
 
 var version string
 
 type (
 	CmdOpts struct {
+		sysbench.RunnerOpts
+		BenchmarkOpts
 		Version bool `long:"version" description:"show version"`
-		benchmark.BenchmarkOpts
-		runner.RunnerOpts
 	}
 )
 
@@ -25,7 +23,7 @@ func main() {
 	opts := CmdOpts{}
 
 	parser := flags.NewParser(&opts, flags.HelpFlag|flags.PassDoubleDash)
-	parser.Usage = fmt.Sprintf("[options]... [%s] [prepare|run]", strings.Join(benchmark.BenchmarkNames(), "|"))
+	parser.Usage = fmt.Sprintf("[options]... [%s] [prepare|run]", strings.Join(benchmarkNames(), "|"))
 
 	args, err := parser.Parse()
 	if err != nil {
@@ -46,8 +44,8 @@ func main() {
 	testname := args[0]
 	command := args[1]
 
-	r := runner.NewRunner(&opts.RunnerOpts)
-	bench, err := benchmark.BenchmarkFactory(testname, &opts.BenchmarkOpts)
+	bench, err := benchmarkFactory(testname, &opts.BenchmarkOpts)
+	r := sysbench.NewRunner(&opts.RunnerOpts, bench)
 
 	if err != nil {
 		fmt.Println(err)
@@ -55,9 +53,9 @@ func main() {
 	}
 
 	if command == "run" {
-		err = r.Run(bench)
+		err = r.Run()
 	} else if command == "prepare" {
-		err = r.Prepare(bench)
+		err = r.Prepare()
 	}
 
 	if err != nil {
