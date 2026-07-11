@@ -238,11 +238,23 @@ func (r *Runner) Run() error {
 						pTlatencyNanoSum[i] += latency
 						latencyNanoSum.Add(latency)
 
-						if latency < latencyNanoMin.Load() {
-							latencyNanoMin.Store(latency)
+						for {
+							currentMin := latencyNanoMin.Load()
+							if latency >= currentMin {
+								break
+							}
+							if latencyNanoMin.CompareAndSwap(currentMin, latency) {
+								break
+							}
 						}
-						if latency > latencyNanoMax.Load() {
-							latencyNanoMax.Store(latency)
+						for {
+							currentMax := latencyNanoMax.Load()
+							if latency <= currentMax {
+								break
+							}
+							if latencyNanoMax.CompareAndSwap(currentMax, latency) {
+								break
+							}
 						}
 
 						intervalHistogram.Add(float64(latency) / nano2mili)
