@@ -231,9 +231,6 @@ func (o *OLTPBench) PreEvent(ctx context.Context) error {
 			o.staticStmts[tableNum] = make(map[string]string)
 			for stmtName, stmtString := range stmtTemplates {
 				o.staticStmts[tableNum][stmtName] = fmt.Sprintf(stmtString, tableNum)
-				if err != nil {
-					return err
-				}
 			}
 		}
 		o.eventFuncRef = o.eventFuncStaticStmt()
@@ -351,9 +348,9 @@ func (o *OLTPBench) eventFuncStaticStmt() func(context.Context) (uint64, uint64,
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -364,9 +361,9 @@ func (o *OLTPBench) eventFuncStaticStmt() func(context.Context) (uint64, uint64,
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 		for i := 0; i < numSumRanges; i++ {
@@ -376,9 +373,9 @@ func (o *OLTPBench) eventFuncStaticStmt() func(context.Context) (uint64, uint64,
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -389,9 +386,9 @@ func (o *OLTPBench) eventFuncStaticStmt() func(context.Context) (uint64, uint64,
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -402,9 +399,9 @@ func (o *OLTPBench) eventFuncStaticStmt() func(context.Context) (uint64, uint64,
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -479,9 +476,9 @@ func (o *OLTPBench) eventFuncPreparedStmt() func(context.Context) (uint64, uint6
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -492,9 +489,9 @@ func (o *OLTPBench) eventFuncPreparedStmt() func(context.Context) (uint64, uint6
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -505,9 +502,9 @@ func (o *OLTPBench) eventFuncPreparedStmt() func(context.Context) (uint64, uint6
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -518,9 +515,9 @@ func (o *OLTPBench) eventFuncPreparedStmt() func(context.Context) (uint64, uint6
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
@@ -531,9 +528,9 @@ func (o *OLTPBench) eventFuncPreparedStmt() func(context.Context) (uint64, uint6
 				_ = tx.Rollback()
 				return numReads, numWrites, numOthers, err
 			}
-			defer rows.Close()
 			for rows.Next() {
 			}
+			rows.Close()
 			numReads += 1
 		}
 
