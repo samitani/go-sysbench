@@ -231,9 +231,6 @@ func (o *OLTPBench) PreEvent(ctx context.Context) error {
 			o.staticStmts[tableNum] = make(map[string]string)
 			for stmtName, stmtString := range stmtTemplates {
 				o.staticStmts[tableNum][stmtName] = fmt.Sprintf(stmtString, tableNum)
-				if err != nil {
-					return err
-				}
 			}
 		}
 		o.eventFuncRef = o.eventFuncStaticStmt()
