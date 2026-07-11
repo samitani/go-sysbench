@@ -326,7 +326,7 @@ func (r *Runner) Run() error {
 		histogram.Percentile(percentile),
 		float64(latencyNanoSum.Load())/nano2mili)
 
-	var transactionsAvg, tranasctionsStddev float64
+	var transactionsAvg, transactionsStddev float64
 	var latencyNanoAvg, latencyNanoStddev float64
 
 	transactionsAvg = float64(totalTransactions.Load()) / float64(r.opts.Threads)
@@ -334,17 +334,17 @@ func (r *Runner) Run() error {
 
 	for i := 0; i < r.opts.Threads; i++ {
 		diffT := math.Abs(transactionsAvg - float64(pTtotalTransactions[i]))
-		tranasctionsStddev += diffT * diffT
+		transactionsStddev += diffT * diffT
 
 		diffL := math.Abs(latencyNanoAvg - float64(pTlatencyNanoSum[i]))
 		latencyNanoStddev += diffL * diffL
 	}
-	tranasctionsStddev = math.Sqrt(tranasctionsStddev / float64(r.opts.Threads))
+	transactionsStddev = math.Sqrt(transactionsStddev / float64(r.opts.Threads))
 	latencyNanoStddev = math.Sqrt(latencyNanoStddev / float64(r.opts.Threads))
 
 	fmt.Printf("Threads fairness (Event distribution by threads):\n"+
 		"    events (avg/stddev):           %.4f/%3.2f\n"+
-		"    execution time (avg/stddev):   %.4f/%3.2f\n", transactionsAvg, tranasctionsStddev, float64(latencyNanoAvg)/nano2sec, float64(latencyNanoStddev)/nano2sec)
+		"    execution time (avg/stddev):   %.4f/%3.2f\n", transactionsAvg, transactionsStddev, float64(latencyNanoAvg)/nano2sec, float64(latencyNanoStddev)/nano2sec)
 
 	return nil
 }
