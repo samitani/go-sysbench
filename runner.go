@@ -262,7 +262,7 @@ func (r *Runner) Run() error {
 					}
 
 					// wait until all events finished, then cancel()
-					if r.opts.Events > 0 && totalTransactions.Load() == r.opts.Events {
+					if r.opts.Events > 0 && totalTransactions.Load() >= r.opts.Events {
 						cancel()
 					}
 				}
